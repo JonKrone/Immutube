@@ -19,22 +19,34 @@ define([
   var fork = _.curry(function(f, future) { return future.fork(log, f); })
   var setHtml = _.curry(function(sel, x) { return $(sel).html(x); });
 
-  // PURE //////////////////////////////////////////////////
-
   const getDom = $.toIO();
   const listen = _.curry((type, el) => Bacon.fromEventTarget(el, type));
 
-  const keypressStream = listen('keyup');
+  // PURE //////////////////////////////////////////////////
+
   const targetValue = compose(_.get('value'), _.get('target'));
-  const valueStream = compose(map(targetValue), keypressStream);
+  const termUrl = function(term) {
+    return 'https://www.googleapis.com/youtube/v3/search?' +
+      $.param({part: 'snippet', q: term, key: api_key});
+  };
 
-  const urlStream = 
+  // :: Entry -> HTML
+  const entryToLi = function(el) {
+    return $('<li />', { "data-youtubeid": el.id.$t, text: el.title.$t });
+  }
 
+  const keyupStream = listen('keyup');
+  const valueStream = compose(map(targetValue), keyupStream);
+  const urlStream = compose(map(termUrl), valueStream);
+  const searchStream = compose(map(http.getJSON), urlStream);
 
+  const liStream = compose(map(entryToLi), searchStream);
+
+  
 
   // IMPURE /////////////////////////////////////////////////////
 
-  getDom('#search').map(valueStream).runIO().onValue(log);
+  getDom('#search').map(searchStream).runIO().onValue(fork(setHtml('#results')));
 
 });
 
@@ -42,11 +54,6 @@ define([
 //  api_key :: String
 var api_key = 'AIzaSyAWoa7aqds2Cx_drrrb5FPsRObFa7Dxkfg';
 
-//+ termToUrl :: String -> URL
-var termToUrl = function(term) {
-  return 'https://www.googleapis.com/youtube/v3/search?' +
-    $.param({part: 'snippet', q: term, key: api_key});
-};
 
 //+ render :: Entry -> Dom
 var render = function(e) {
